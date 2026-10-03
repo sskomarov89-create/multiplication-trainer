@@ -32,7 +32,7 @@
         <div class="hero-orbit small" aria-hidden="true"><span>2</span><span>×</span><span>5</span></div>
         <p class="eyebrow">Добро пожаловать!</p>
         <h1 id="login-title">Кто сегодня играет?</h1>
-        <p class="login-copy">Выбери своё имя, чтобы звёзды и рекорды не перепутались.</p>
+        <p class="login-copy">Придумай игровое имя — его увидят в общем рейтинге.</p>
         <div class="known-players" id="known-players" aria-label="Игроки на этом устройстве" hidden>
           <p>Продолжить игру</p>
           <div id="known-player-buttons"></div>
@@ -57,6 +57,11 @@
       <p class="eyebrow">Привет, <span id="welcome-name"></span>!</p>
       <h1 id="welcome-title">Готов к раунду?</h1>
       <p class="welcome-copy">В каждом раунде ровно 10 примеров.<br>В конце увидишь свой результат!</p>
+      <button class="grade-summary" id="rewards-button" type="button" aria-haspopup="dialog">
+        <span class="grade-icon" id="grade-icon" aria-hidden="true">◇</span>
+        <span><small>Твой статус</small><strong id="grade-name">Искатель</strong></span>
+        <span class="rank-chip">место <strong id="personal-rank">—</strong></span>
+      </button>
       <button class="primary-button start-button" id="start-button" type="button">Начать раунд <span aria-hidden="true">→</span></button>
       <div class="welcome-stats" aria-label="Текущий прогресс">
         <span>Раунд <strong id="welcome-round">1</strong></span><span aria-hidden="true">•</span>
@@ -103,6 +108,7 @@
     <h2 id="round-title">Раунд завершён!</h2>
     <p class="round-score"><strong id="round-score">8 из 10</strong><span>правильных ответов</span></p>
     <p id="round-message">Ты здорово постарался!</p>
+    <p class="round-reward" id="round-reward">Статус: Искатель</p>
     <button class="primary-button" id="next-round" type="button">Следующий раунд →</button>
   </dialog>
 
@@ -122,10 +128,31 @@
     <button class="danger-text-button" id="reset-progress" type="button">Сбросить прогресс</button>
   </dialog>
 
+  <dialog class="rewards-dialog" id="rewards-dialog" aria-labelledby="rewards-title">
+    <div class="dialog-head">
+      <div><p class="eyebrow">Твоя коллекция</p><h2 id="rewards-title">Награды и рейтинг</h2></div>
+      <button class="icon-button" id="close-rewards" type="button" aria-label="Закрыть">×</button>
+    </div>
+    <section class="grade-card" aria-labelledby="current-grade-label">
+      <span class="grade-card-icon" id="rewards-grade-icon" aria-hidden="true">◇</span>
+      <div><small id="current-grade-label">Текущий статус</small><strong id="rewards-grade-name">Искатель</strong><span id="grade-next">До следующего статуса — 10 звёзд</span></div>
+    </section>
+    <section class="rewards-section" aria-labelledby="badges-title">
+      <div class="section-title"><h3 id="badges-title">Значки</h3><span id="badges-count">0 из 6</span></div>
+      <div class="badges-grid" id="badges-grid"></div>
+    </section>
+    <section class="rewards-section" aria-labelledby="leaderboard-title">
+      <div class="section-title"><h3 id="leaderboard-title">Общий рейтинг</h3><span id="total-players"></span></div>
+      <p class="leaderboard-note">Больше звёзд — выше место. При равенстве учитываются точность и серия.</p>
+      <ol class="leaderboard-list" id="leaderboard-list"></ol>
+      <div class="my-rank-row" id="my-rank-row" hidden></div>
+    </section>
+  </dialog>
+
   <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
     <div class="confirm-icon" aria-hidden="true">↻</div>
     <h2 id="confirm-title">Сбросить прогресс?</h2>
-    <p>Звёзды, уровни, раунды и рекорды начнутся сначала.</p>
+    <p>Звёзды, статусы, значки, раунды и место в рейтинге начнутся сначала.</p>
     <div class="confirm-actions">
       <button class="secondary-button" id="cancel-reset" type="button">Не сбрасывать</button>
       <button class="reset-button" id="confirm-reset" type="button">Да, сбросить</button>

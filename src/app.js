@@ -19,6 +19,9 @@ const elements = {
   resetProgress: $('#reset-progress'), confirmDialog: $('#confirm-dialog'),
   cancelReset: $('#cancel-reset'), confirmReset: $('#confirm-reset'),
   roundDialog: $('#round-dialog'), nextRound: $('#next-round'),
+  rewardsButton: $('#rewards-button'), rewardsDialog: $('#rewards-dialog'),
+  closeRewards: $('#close-rewards'), badgesGrid: $('#badges-grid'),
+  leaderboardList: $('#leaderboard-list'), myRankRow: $('#my-rank-row'),
 };
 
 let sessions = loadSessions();
@@ -30,6 +33,7 @@ let answered = false;
 let submitting = false;
 let pendingRound = null;
 let celebrationTimer = null;
+let leaderboard = null;
 
 class ApiError extends Error {
   constructor(status, payload) {
@@ -164,6 +168,82 @@ function renderProgress() {
   setText('#progress-accuracy', `${accuracy}%`);
   setText('#progress-solved', progress.totalSolved);
   setText('#progress-rounds', progress.completedRounds);
+  const grade = progress.rewards?.grade;
+  if (grade) {
+    setText('#grade-icon', grade.icon);
+    setText('#grade-name', grade.name);
+    setText('#rewards-grade-icon', grade.icon);
+    setText('#rewards-grade-name', grade.name);
+    setText('#round-reward', `Статус: ${grade.name}`);
+    setText('#grade-next', grade.nextName
+      ? `До статуса «${grade.nextName}» — ${grade.starsToNext} звёзд`
+      : 'Высший статус уже получен!');
+    renderBadges(progress.rewards.badges);
+  }
+}
+
+function renderBadges(badges = []) {
+  elements.badgesGrid.replaceChildren();
+  for (const badge of badges) {
+    const card = document.createElement('div');
+    card.className = `badge-card${badge.unlocked ? '' : ' locked'}`;
+    const symbol = document.createElement('span');
+    symbol.className = 'badge-symbol';
+    symbol.textContent = badge.unlocked ? badge.icon : '?';
+    const name = document.createElement('strong');
+    name.textContent = badge.name;
+    const description = document.createElement('small');
+    description.textContent = badge.description;
+    card.append(symbol, name, description);
+    elements.badgesGrid.append(card);
+  }
+  setText('#badges-count', `${badges.filter((badge) => badge.unlocked).length} из ${badges.length}`);
+}
+
+function leaderboardRow(entry, isMe = false) {
+  const row = document.createElement('li');
+  row.className = `leaderboard-row${isMe ? ' is-me' : ''}`;
+  const position = document.createElement('span');
+  position.className = 'leaderboard-position';
+  position.textContent = `#${entry.position}`;
+  const player = document.createElement('span');
+  player.className = 'leaderboard-player';
+  const name = document.createElement('strong');
+  name.textContent = isMe ? `${entry.name} — это ты` : entry.name;
+  const details = document.createElement('small');
+  details.textContent = `${entry.grade.icon} ${entry.grade.name} · точность ${entry.accuracy}%`;
+  player.append(name, details);
+  const stars = document.createElement('span');
+  stars.className = 'leaderboard-stars';
+  stars.textContent = `${entry.stars} ★`;
+  row.append(position, player, stars);
+  return row;
+}
+
+function renderLeaderboard() {
+  if (!leaderboard) return;
+  elements.leaderboardList.replaceChildren();
+  for (const entry of leaderboard.leaders) {
+    elements.leaderboardList.append(leaderboardRow(entry, entry.name === profile.name));
+  }
+  setText('#personal-rank', `#${leaderboard.me.position}`);
+  setText('#total-players', `игроков: ${leaderboard.totalPlayers}`);
+  const inTop = leaderboard.leaders.some((entry) => entry.name === profile.name);
+  elements.myRankRow.hidden = inTop;
+  if (!inTop) {
+    const myRow = leaderboardRow(leaderboard.me, true);
+    elements.myRankRow.replaceChildren(...myRow.childNodes);
+  }
+}
+
+async function loadLeaderboard() {
+  try {
+    leaderboard = await api('/api/leaderboard');
+    renderLeaderboard();
+  } catch {
+    setText('#personal-rank', '—');
+    setText('#total-players', 'рейтинг недоступен');
+  }
 }
 
 async function activateSession(token) {
@@ -177,6 +257,7 @@ async function activateSession(token) {
     rememberSession(profile.name, activeToken);
     renderProgress();
     showScreen('welcome');
+    await loadLeaderboard();
   } catch (error) {
     if (error.status === 401) {
       removeSession(token);
@@ -237,6 +318,7 @@ function openRoundResult(round) {
       ? 'Очень хороший результат!'
       : 'Ты закончил раунд — продолжай тренироваться!';
   setText('#round-message', message);
+  setText('#round-reward', `Статус: ${progress.rewards.grade.name} · ${progress.rankingStars} рейтинговых звёзд`);
   if (!elements.roundDialog.open) elements.roundDialog.showModal();
 }
 
@@ -295,15 +377,20 @@ async function submitAnswer() {
       elements.feedback.textContent = `Верно! +1 звезда ★${record}`;
       const messages = [];
       if (result.events.includes('level-up')) messages.push(`Уровень ${progress.level}!`);
+      if (result.events.includes('grade-up')) messages.push(`Новый статус: ${progress.rewards.grade.name}!`);
+      const newBadgeId = result.events.find((event) => event.startsWith('badge:'))?.slice(6);
+      const newBadge = progress.rewards.badges.find((badge) => badge.id === newBadgeId);
+      if (newBadge) messages.push(`Новый значок: ${newBadge.name}!`);
       if (result.events.includes('streak-10')) messages.push('10 верных подряд!');
       else if (result.events.includes('streak-5')) messages.push('5 верных подряд!');
-      if (messages.length) showCelebration(messages.join(' '), result.events.includes('level-up'));
+      if (messages.length) showCelebration(messages.join(' '), result.events.includes('level-up') || result.events.includes('grade-up'));
     } else {
       elements.card.classList.add('is-incorrect');
       elements.feedback.className = 'feedback incorrect';
       elements.feedback.textContent = `Почти! Правильный ответ: ${result.correctAnswer}`;
     }
     renderProgress();
+    if (result.isCorrect) loadLeaderboard();
     if (pendingRound) {
       setText('#round-number', pendingRound.number);
       setText('#round-count', '10 из 10');
@@ -363,6 +450,7 @@ async function createPlayer(event) {
     elements.playerName.value = '';
     renderProgress();
     showScreen('welcome');
+    await loadLeaderboard();
   } catch (error) {
     setNameFeedback(error.message, true);
     if (error.payload?.suggestions) showSuggestions(error.payload.suggestions);
@@ -377,8 +465,23 @@ elements.playerForm.addEventListener('submit', createPlayer);
 elements.playerName.addEventListener('input', () => { setNameFeedback('От 2 до 20 букв или цифр'); showSuggestions(); });
 elements.start.addEventListener('click', startTraining);
 elements.home.addEventListener('click', () => { if (profile) showScreen('welcome'); });
-elements.switchPlayer.addEventListener('click', () => { closeDialog(elements.progressDialog); renderKnownPlayers(); showScreen('login'); });
+elements.switchPlayer.addEventListener('click', () => {
+  closeDialog(elements.progressDialog);
+  closeDialog(elements.rewardsDialog);
+  leaderboard = null;
+  renderKnownPlayers();
+  showScreen('login');
+});
 elements.progressButton.addEventListener('click', openProgress);
+elements.rewardsButton.addEventListener('click', async () => {
+  setText('#total-players', 'загружаю…');
+  if (!elements.rewardsDialog.open) elements.rewardsDialog.showModal();
+  await loadLeaderboard();
+});
+elements.closeRewards.addEventListener('click', () => closeDialog(elements.rewardsDialog));
+elements.rewardsDialog.addEventListener('click', (event) => {
+  if (event.target === elements.rewardsDialog) closeDialog(elements.rewardsDialog);
+});
 elements.closeProgress.addEventListener('click', () => closeDialog(elements.progressDialog));
 elements.progressDialog.addEventListener('click', (event) => { if (event.target === elements.progressDialog) closeDialog(elements.progressDialog); });
 elements.form.addEventListener('submit', (event) => { event.preventDefault(); submitAnswer(); });
@@ -408,6 +511,7 @@ elements.confirmReset.addEventListener('click', async () => {
     profile = payload.profile;
     progress = payload.progress;
     renderProgress();
+    await loadLeaderboard();
     closeDialog(elements.confirmDialog);
     showScreen('welcome');
     showCelebration('Готово. Начнём новое приключение!');

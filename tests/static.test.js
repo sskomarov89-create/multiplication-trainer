@@ -45,6 +45,18 @@ describe('static PWA shell', () => {
     assert.match(app, /\/api\/progress\/reset/);
   });
 
+  test('rewards and global leaderboard have discoverable child-friendly UI', async () => {
+    const html = await read('index.html');
+    assert.match(html, /id="grade-name"/);
+    assert.match(html, /id="personal-rank"/);
+    assert.match(html, /id="rewards-button"/);
+    assert.match(html, /id="rewards-dialog"/);
+    assert.match(html, /id="badges-grid"/);
+    assert.match(html, /id="leaderboard-list"/);
+    const app = await read('src/app.js');
+    assert.match(app, /\/api\/leaderboard/);
+  });
+
   test('manifest describes a standalone installable app with icons', async () => {
     const manifest = JSON.parse(await read('manifest.webmanifest'));
     assert.equal(manifest.display, 'standalone');

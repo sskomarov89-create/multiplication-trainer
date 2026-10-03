@@ -15,9 +15,12 @@
 Это device-bound вход, а не password authentication: восстановление на новом устройстве без token не предусмотрено.
 
 ## Данные
-SQLite хранит профиль, global counters, текущий раунд, завершённые раунды, weak pairs и idempotency results по `submission_id`.
+SQLite хранит профиль, global counters, отдельные `ranked_stars`, текущий раунд, завершённые раунды, weak pairs и idempotency results по `submission_id`.
 
 Запись ответа выполняется в `BEGIN IMMEDIATE` transaction. Десятый ответ атомарно фиксирует round result и открывает следующий раунд.
+
+## Награды и рейтинг
+Статусы и значки вычисляются детерминированно из server state, отдельные таблицы наград не нужны. `GET /api/leaderboard` требует session token и возвращает top-10 плюс личную позицию. Сортировка: `ranked_stars DESC`, accuracy DESC, best streak DESC, затем стабильный порядок создания. При миграции существующей server DB текущие звёзды становятся рейтинговыми; клиентский импорт старого localStorage не увеличивает `ranked_stars`.
 
 ## Security
 - API и статика работают с одного origin;

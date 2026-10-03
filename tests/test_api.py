@@ -66,6 +66,16 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertTrue(result["isCorrect"])
         self.assertEqual(result["progress"]["currentRound"]["answered"], 1)
 
+        status, board = self.request("GET", "/api/leaderboard", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(board["me"]["name"], "Маша")
+        self.assertEqual(board["me"]["position"], 1)
+        self.assertEqual(board["leaders"][0]["stars"], 1)
+
+        status, unauthorized_board = self.request("GET", "/api/leaderboard")
+        self.assertEqual(status, 401)
+        self.assertEqual(unauthorized_board["error"], "invalid_session")
+
     def test_static_app_and_health_endpoint_are_served(self):
         with urlopen(f"{self.base}/", timeout=3) as response:
             self.assertEqual(response.status, 200)

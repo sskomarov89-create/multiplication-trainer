@@ -1,4 +1,4 @@
-const CACHE = 'umnozhayka-v2';
+const CACHE = 'umnozhayka-v3';
 const APP_SHELL = [
   './',
   './index.html',

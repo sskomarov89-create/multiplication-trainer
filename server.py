@@ -20,6 +20,13 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_DB_PATH = ROOT / "data" / "multiplication-trainer.sqlite3"
 ROUND_SIZE = 10
 MAX_COUNTER = 1_000_000
+GRADE_TIERS = (
+    (0, "Искатель", "◇"),
+    (10, "Знаток", "★"),
+    (25, "Суперсчётчик", "✦"),
+    (50, "Мастер", "◆"),
+    (100, "Легенда", "♛"),
+)
 
 
 class InvalidNameError(ValueError):
@@ -60,6 +67,46 @@ def safe_counter(value: Any, maximum: int = MAX_COUNTER) -> int:
 
 def compute_level(total_correct: int) -> int:
     return 1 + safe_counter(total_correct) // 10
+
+
+def grade_for_stars(ranking_stars: int) -> dict[str, Any]:
+    stars = safe_counter(ranking_stars)
+    tier_index = 0
+    for index, (minimum, _name, _icon) in enumerate(GRADE_TIERS):
+        if stars >= minimum:
+            tier_index = index
+    minimum, name, icon = GRADE_TIERS[tier_index]
+    next_tier = GRADE_TIERS[tier_index + 1] if tier_index + 1 < len(GRADE_TIERS) else None
+    return {
+        "name": name,
+        "icon": icon,
+        "minimumStars": minimum,
+        "nextName": next_tier[1] if next_tier else None,
+        "nextAt": next_tier[0] if next_tier else None,
+        "starsToNext": max(0, next_tier[0] - stars) if next_tier else 0,
+    }
+
+
+def reward_summary(
+    *, ranking_stars: int, total_solved: int, total_correct: int,
+    best_streak: int, completed_rounds: int,
+) -> dict[str, Any]:
+    solved = safe_counter(total_solved)
+    correct = min(safe_counter(total_correct), solved)
+    accuracy = correct / solved if solved else 0
+    badges = [
+        {"id": "first-star", "name": "Первая звезда", "icon": "★", "description": "Дать первый верный ответ", "unlocked": ranking_stars >= 1},
+        {"id": "first-round", "name": "Первый раунд", "icon": "✓", "description": "Завершить первый раунд", "unlocked": completed_rounds >= 1},
+        {"id": "streak-5", "name": "Пять подряд", "icon": "↗", "description": "Ответить верно 5 раз подряд", "unlocked": best_streak >= 5},
+        {"id": "sharp-eye", "name": "Меткий счёт", "icon": "◎", "description": "Не меньше 80% верных после 10 примеров", "unlocked": solved >= 10 and accuracy >= 0.8},
+        {"id": "star-collector", "name": "Собиратель", "icon": "✦", "description": "Заработать 50 рейтинговых звёзд", "unlocked": ranking_stars >= 50},
+        {"id": "streak-10", "name": "Десять подряд", "icon": "◆", "description": "Ответить верно 10 раз подряд", "unlocked": best_streak >= 10},
+    ]
+    return {
+        "grade": grade_for_stars(ranking_stars),
+        "badges": badges,
+        "unlockedCount": sum(1 for badge in badges if badge["unlocked"]),
+    }
 
 
 def canonical_key(a: int, b: int) -> str:
@@ -135,6 +182,7 @@ def open_database(path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
             total_solved INTEGER NOT NULL DEFAULT 0 CHECK(total_solved >= 0),
             total_correct INTEGER NOT NULL DEFAULT 0 CHECK(total_correct >= 0),
             stars INTEGER NOT NULL DEFAULT 0 CHECK(stars >= 0),
+            ranked_stars INTEGER NOT NULL DEFAULT 0 CHECK(ranked_stars >= 0),
             current_streak INTEGER NOT NULL DEFAULT 0 CHECK(current_streak >= 0),
             best_streak INTEGER NOT NULL DEFAULT 0 CHECK(best_streak >= 0),
             weak_pairs TEXT NOT NULL DEFAULT '{}',
@@ -163,6 +211,19 @@ def open_database(path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
         );
         """
     )
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(profiles)")}
+    if "ranked_stars" not in columns:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute(
+                "ALTER TABLE profiles ADD COLUMN ranked_stars INTEGER NOT NULL DEFAULT 0 CHECK(ranked_stars >= 0)"
+            )
+            # Existing server-earned stars predate the leaderboard and remain valid.
+            connection.execute("UPDATE profiles SET ranked_stars = stars")
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
     return connection
 
 
@@ -186,6 +247,14 @@ def row_payload(row: sqlite3.Row) -> dict[str, Any]:
     weak_pairs = normalize_weak_pairs(json.loads(row["weak_pairs"] or "{}"))
     total_solved = row["total_solved"]
     total_correct = row["total_correct"]
+    ranking_stars = row["ranked_stars"]
+    rewards = reward_summary(
+        ranking_stars=ranking_stars,
+        total_solved=total_solved,
+        total_correct=total_correct,
+        best_streak=row["best_streak"],
+        completed_rounds=row["completed_rounds"],
+    )
     return {
         "profile": {"name": row["name"]},
         "progress": {
@@ -193,11 +262,13 @@ def row_payload(row: sqlite3.Row) -> dict[str, Any]:
             "totalCorrect": total_correct,
             "accuracy": round(total_correct / total_solved, 4) if total_solved else 0,
             "stars": row["stars"],
+            "rankingStars": ranking_stars,
             "currentStreak": row["current_streak"],
             "bestStreak": row["best_streak"],
             "level": compute_level(total_correct),
             "weakPairs": weak_pairs,
             "completedRounds": row["completed_rounds"],
+            "rewards": rewards,
             "currentRound": {
                 "number": row["completed_rounds"] + 1,
                 "answered": row["current_round_answered"],
@@ -233,9 +304,9 @@ def register_profile(
         connection.execute(
             """
             INSERT INTO profiles (
-                name, name_key, token_hash, total_solved, total_correct, stars,
+                name, name_key, token_hash, total_solved, total_correct, stars, ranked_stars,
                 current_streak, best_streak, weak_pairs, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
@@ -244,6 +315,7 @@ def register_profile(
                 values["total_solved"],
                 values["total_correct"],
                 values["stars"],
+                0,
                 values["current_streak"],
                 values["best_streak"],
                 values["weak_pairs"],
@@ -265,6 +337,41 @@ def register_profile(
 
 def get_profile_by_token(connection: sqlite3.Connection, token: str) -> dict[str, Any]:
     return row_payload(profile_row_by_token(connection, token))
+
+
+def leaderboard_entry(row: sqlite3.Row, position: int) -> dict[str, Any]:
+    solved = row["total_solved"]
+    accuracy = round(row["total_correct"] / solved * 100) if solved else 0
+    return {
+        "position": position,
+        "name": row["name"],
+        "stars": row["ranked_stars"],
+        "accuracy": accuracy,
+        "bestStreak": row["best_streak"],
+        "completedRounds": row["completed_rounds"],
+        "grade": grade_for_stars(row["ranked_stars"]),
+    }
+
+
+def get_leaderboard(connection: sqlite3.Connection, token: str, limit: int = 10) -> dict[str, Any]:
+    current = profile_row_by_token(connection, token)
+    rows = connection.execute(
+        """
+        SELECT * FROM profiles
+        ORDER BY ranked_stars DESC,
+            CASE WHEN total_solved = 0 THEN 0.0
+                 ELSE CAST(total_correct AS REAL) / total_solved END DESC,
+            best_streak DESC, created_at ASC, id ASC
+        """
+    ).fetchall()
+    entries = [leaderboard_entry(row, index + 1) for index, row in enumerate(rows)]
+    me = next(
+        (entry for entry, row in zip(entries, rows) if row["id"] == current["id"]),
+        None,
+    )
+    if me is None:
+        raise InvalidTokenError("invalid_session")
+    return {"leaders": entries[:max(1, min(limit, 50))], "me": me, "totalPlayers": len(entries)}
 
 
 def record_answer(
@@ -297,9 +404,11 @@ def record_answer(
 
         expected = a * b
         is_correct = int(str(answer).strip()) == expected
+        old_rewards = row_payload(profile)["progress"]["rewards"]
         total_solved = profile["total_solved"] + 1
         total_correct = profile["total_correct"] + (1 if is_correct else 0)
         stars = profile["stars"] + (1 if is_correct else 0)
+        ranking_stars = profile["ranked_stars"] + (1 if is_correct else 0)
         current_streak = profile["current_streak"] + 1 if is_correct else 0
         best_streak = max(profile["best_streak"], current_streak)
         weak_pairs = normalize_weak_pairs(json.loads(profile["weak_pairs"] or "{}"))
@@ -337,7 +446,7 @@ def record_answer(
         connection.execute(
             """
             UPDATE profiles SET
-                total_solved = ?, total_correct = ?, stars = ?, current_streak = ?,
+                total_solved = ?, total_correct = ?, stars = ?, ranked_stars = ?, current_streak = ?,
                 best_streak = ?, weak_pairs = ?, current_round_answered = ?,
                 current_round_correct = ?, completed_rounds = ?, updated_at = ?
             WHERE id = ?
@@ -346,6 +455,7 @@ def record_answer(
                 total_solved,
                 total_correct,
                 stars,
+                ranking_stars,
                 current_streak,
                 best_streak,
                 json.dumps(weak_pairs, ensure_ascii=False, sort_keys=True),
@@ -357,6 +467,13 @@ def record_answer(
             ),
         )
         updated = connection.execute("SELECT * FROM profiles WHERE id = ?", (profile["id"],)).fetchone()
+        new_rewards = row_payload(updated)["progress"]["rewards"]
+        if new_rewards["grade"]["name"] != old_rewards["grade"]["name"]:
+            events.append("grade-up")
+        old_badges = {badge["id"] for badge in old_rewards["badges"] if badge["unlocked"]}
+        for badge in new_rewards["badges"]:
+            if badge["unlocked"] and badge["id"] not in old_badges:
+                events.append(f"badge:{badge['id']}")
         result = {
             **row_payload(updated),
             "isCorrect": is_correct,
@@ -383,7 +500,7 @@ def reset_progress(connection: sqlite3.Connection, token: str) -> dict[str, Any]
         connection.execute("DELETE FROM rounds WHERE profile_id = ?", (profile["id"],))
         connection.execute(
             """
-            UPDATE profiles SET total_solved = 0, total_correct = 0, stars = 0,
+            UPDATE profiles SET total_solved = 0, total_correct = 0, stars = 0, ranked_stars = 0,
                 current_streak = 0, best_streak = 0, weak_pairs = '{}',
                 current_round_answered = 0, current_round_correct = 0,
                 completed_rounds = 0, updated_at = ? WHERE id = ?
@@ -458,6 +575,14 @@ class AppHandler(SimpleHTTPRequestHandler):
             try:
                 with closing(self.database()) as database:
                     payload = get_profile_by_token(database, self.bearer_token())
+                self.send_json(HTTPStatus.OK, payload)
+            except InvalidTokenError:
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "invalid_session"})
+            return
+        if path == "/api/leaderboard":
+            try:
+                with closing(self.database()) as database:
+                    payload = get_leaderboard(database, self.bearer_token())
                 self.send_json(HTTPStatus.OK, payload)
             except InvalidTokenError:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "invalid_session"})

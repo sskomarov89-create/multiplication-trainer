@@ -115,20 +115,27 @@ try {
   assert.equal(await page.locator('#round-count').textContent(), '0 из 10');
   record('9. Следующий раунд начинается отдельно');
 
+  await solveCorrect(page);
+  assert.equal(await page.locator('#stars-value').textContent(), '10');
+  assert.equal(await page.locator('#grade-name').textContent(), 'Знаток');
+  assert.match(await page.locator('#celebration-text').textContent(), /Новый статус: Знаток/);
+  record('10. Десятая рейтинговая звезда повышает статус');
+
   await page.locator('#back-to-welcome').click();
   await page.reload();
   await page.locator('#welcome-screen').waitFor();
   assert.equal(await page.locator('#welcome-round').textContent(), '2');
-  assert.equal(await page.locator('#welcome-stars').textContent(), '9');
-  record('10. Имя и прогресс сохраняются после reload');
+  assert.equal(await page.locator('#welcome-stars').textContent(), '10');
+  assert.equal(await page.locator('#grade-name').textContent(), 'Знаток');
+  record('11. Имя, статус и прогресс сохраняются после reload');
 
   await page.locator('#switch-player').click();
   assert.equal(await page.locator('#login-screen').isVisible(), true);
   assert.equal(await page.locator('.known-player-button').textContent(), names.masha);
   await page.locator('.known-player-button').click();
   await page.locator('#welcome-screen').waitFor();
-  assert.equal(await page.locator('#welcome-stars').textContent(), '9');
-  record('11. Смена и возврат к локально известному игроку');
+  assert.equal(await page.locator('#welcome-stars').textContent(), '10');
+  record('12. Смена и возврат к локально известному игроку');
 
   const secondDevice = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const secondPage = await secondDevice.newPage();
@@ -138,29 +145,42 @@ try {
   await secondPage.locator('#name-feedback.error').waitFor();
   assert.match(await secondPage.locator('#name-feedback').textContent(), /занято/i);
   assert.ok(await secondPage.locator('#name-suggestions button').count() >= 2);
-  record('12. Занятое имя отклоняется глобально и предлагает варианты');
+  record('13. Занятое имя отклоняется глобально и предлагает варианты');
 
   await createPlayer(secondPage, names.petya);
   assert.equal(await secondPage.locator('#welcome-stars').textContent(), '0');
   await secondPage.locator('#start-button').click();
   await solveCorrect(secondPage);
   assert.equal(await secondPage.locator('#stars-value').textContent(), '1');
-  assert.equal(await page.locator('#welcome-stars').textContent(), '9');
-  record('13. Прогресс разных игроков изолирован');
+  assert.equal(await page.locator('#welcome-stars').textContent(), '10');
+  record('14. Прогресс разных игроков изолирован');
   await secondDevice.close();
+
+  await page.locator('#rewards-button').click();
+  await page.locator('#leaderboard-list .leaderboard-row').first().waitFor();
+  assert.equal(await page.locator('#rewards-grade-name').textContent(), 'Знаток');
+  assert.equal(await page.locator('#badges-count').textContent(), '5 из 6');
+  const ownTopRows = await page.locator('#leaderboard-list .leaderboard-row.is-me').count();
+  const ownSeparateRow = await page.locator('#my-rank-row').isVisible();
+  assert.ok(ownTopRows === 1 || ownSeparateRow);
+  assert.match(await page.locator('#personal-rank').textContent(), /^#\d+$/);
+  await page.screenshot({ path: new URL('mobile-rewards.png', evidenceDir).pathname, fullPage: true });
+  await page.locator('#close-rewards').click();
+  record('15. Значки, статус и личное место видны в общем рейтинге');
 
   await page.locator('#progress-button').click();
   assert.equal(await page.locator('#progress-rounds').textContent(), '1');
   await page.locator('#reset-progress').click();
   await page.locator('#cancel-reset').click();
-  assert.equal(await page.locator('#progress-stars').textContent(), '9');
+  assert.equal(await page.locator('#progress-stars').textContent(), '10');
   await page.locator('#reset-progress').click();
   await page.locator('#confirm-reset').click();
   await page.locator('#confirm-dialog').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#welcome-screen').isVisible(), true);
   assert.equal(await page.locator('#welcome-stars').textContent(), '0');
   assert.equal(await page.locator('#welcome-round').textContent(), '1');
-  record('14. Сброс требует подтверждения и очищает только текущего игрока');
+  assert.equal(await page.locator('#grade-name').textContent(), 'Искатель');
+  record('16. Сброс требует подтверждения и очищает награды текущего игрока');
 
   const metrics = await page.evaluate(() => ({
     viewport: [innerWidth, innerHeight], bodyWidth: document.body.scrollWidth,
@@ -175,7 +195,7 @@ try {
     .filter((item) => item.w < 44 || item.h < 44));
   assert.deepEqual(smallTargets, []);
   await page.screenshot({ path: new URL('mobile-profile.png', evidenceDir).pathname, fullPage: true });
-  record('15. iPhone viewport, touch targets и отсутствие overflow');
+  record('17. iPhone viewport, touch targets и отсутствие overflow');
 
   const manifestResponse = await page.request.get(`${BASE_URL}/manifest.webmanifest`);
   assert.equal(manifestResponse.ok(), true);
@@ -184,7 +204,7 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' });
   assert.equal(await page.locator('#login-screen').isVisible(), true);
   await mobile.setOffline(false);
-  record('16. PWA shell открывается без сети и не подменяет API кэшем');
+  record('18. PWA shell открывается без сети и не подменяет API кэшем');
   await mobile.close();
 
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -196,7 +216,7 @@ try {
   assert.ok(card && card.width <= 620 && card.x > 300);
   await solveCorrect(desktopPage, true);
   await desktopPage.screenshot({ path: new URL('desktop.png', evidenceDir).pathname, fullPage: true });
-  record('17. Desktop layout и keyboard flow');
+  record('19. Desktop layout и keyboard flow');
   await desktop.close();
 
   console.log(JSON.stringify({ status: 'PASS', scenarios: results }, null, 2));
