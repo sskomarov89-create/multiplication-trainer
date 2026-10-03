@@ -1,58 +1,84 @@
-import {
-  applyAnswer,
-  computeAccuracy,
-  defaultState,
-  generateExample,
-  normalizeState,
-} from './core.js';
+import { computeAccuracy, generateExample } from './core.js';
 
-const STORAGE_KEY = 'umnozhayka.progress.v1';
+const SESSION_KEY = 'umnozhayka.sessions.v1';
+const LEGACY_PROGRESS_KEY = 'umnozhayka.progress.v1';
 const $ = (selector) => document.querySelector(selector);
 
 const elements = {
-  welcome: $('#welcome-screen'),
-  trainer: $('#trainer-screen'),
-  home: $('#home-button'),
-  start: $('#start-button'),
-  progressButton: $('#progress-button'),
-  progressDialog: $('#progress-dialog'),
-  closeProgress: $('#close-progress'),
-  form: $('#answer-form'),
-  input: $('#answer-input'),
-  feedback: $('#feedback'),
-  check: $('#check-button'),
-  card: $('#practice-card'),
-  factorA: $('#factor-a'),
-  factorB: $('#factor-b'),
-  restart: $('#restart-button'),
-  celebration: $('#celebration'),
-  celebrationText: $('#celebration-text'),
-  resetProgress: $('#reset-progress'),
-  confirmDialog: $('#confirm-dialog'),
-  cancelReset: $('#cancel-reset'),
-  confirmReset: $('#confirm-reset'),
+  login: $('#login-screen'), welcome: $('#welcome-screen'), trainer: $('#trainer-screen'),
+  appActions: $('#app-actions'), home: $('#home-button'), switchPlayer: $('#switch-player'),
+  headerPlayer: $('#header-player'), playerForm: $('#player-form'), playerName: $('#player-name'),
+  playerSubmit: $('#player-submit'), nameFeedback: $('#name-feedback'), nameSuggestions: $('#name-suggestions'),
+  legacyOption: $('#legacy-progress-option'), claimLegacy: $('#claim-legacy-progress'),
+  knownPlayers: $('#known-players'), knownPlayerButtons: $('#known-player-buttons'),
+  start: $('#start-button'), progressButton: $('#progress-button'), progressDialog: $('#progress-dialog'),
+  closeProgress: $('#close-progress'), form: $('#answer-form'), input: $('#answer-input'),
+  feedback: $('#feedback'), check: $('#check-button'), card: $('#practice-card'),
+  factorA: $('#factor-a'), factorB: $('#factor-b'), backToWelcome: $('#back-to-welcome'),
+  celebration: $('#celebration'), celebrationText: $('#celebration-text'),
+  resetProgress: $('#reset-progress'), confirmDialog: $('#confirm-dialog'),
+  cancelReset: $('#cancel-reset'), confirmReset: $('#confirm-reset'),
+  roundDialog: $('#round-dialog'), nextRound: $('#next-round'),
 };
 
-let progress = loadProgress();
+let sessions = loadSessions();
+let activeToken = sessions.activeToken;
+let profile = null;
+let progress = null;
 let problem = null;
 let answered = false;
+let submitting = false;
+let pendingRound = null;
 let celebrationTimer = null;
 
-function loadProgress() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return normalizeState(stored ? JSON.parse(stored) : null);
-  } catch {
-    return defaultState();
+class ApiError extends Error {
+  constructor(status, payload) {
+    super(payload?.message || 'request_failed');
+    this.status = status;
+    this.payload = payload || {};
   }
 }
 
-function saveProgress() {
+function loadSessions() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+    const parsed = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
+    const saved = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+    const valid = saved.filter((item) => item && typeof item.name === 'string' && typeof item.token === 'string');
+    return {
+      activeToken: typeof parsed.activeToken === 'string' ? parsed.activeToken : null,
+      sessions: valid.slice(0, 20),
+    };
   } catch {
-    // Training remains usable when private storage is unavailable.
+    return { activeToken: null, sessions: [] };
   }
+}
+
+function saveSessions() {
+  sessions.activeToken = activeToken;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(sessions));
+}
+
+function legacyProgress() {
+  try {
+    return JSON.parse(localStorage.getItem(LEGACY_PROGRESS_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (options.auth !== false && activeToken) headers.Authorization = `Bearer ${activeToken}`;
+  let response;
+  try {
+    response = await fetch(path, { ...options, headers });
+  } catch {
+    throw new ApiError(0, { message: 'Нет связи с сервером. Попробуй ещё раз.' });
+  }
+  let payload = {};
+  try { payload = await response.json(); } catch { /* empty or invalid response */ }
+  if (!response.ok) throw new ApiError(response.status, payload);
+  return payload;
 }
 
 function setText(selector, value) {
@@ -60,34 +86,119 @@ function setText(selector, value) {
   if (element) element.textContent = String(value);
 }
 
+function showScreen(name) {
+  elements.login.hidden = name !== 'login';
+  elements.welcome.hidden = name !== 'welcome';
+  elements.trainer.hidden = name !== 'trainer';
+  elements.appActions.hidden = name === 'login';
+}
+
+function renderKnownPlayers() {
+  elements.knownPlayerButtons.replaceChildren();
+  elements.knownPlayers.hidden = sessions.sessions.length === 0;
+  for (const saved of sessions.sessions) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'known-player-button';
+    button.textContent = saved.name;
+    button.addEventListener('click', () => activateSession(saved.token));
+    elements.knownPlayerButtons.append(button);
+  }
+}
+
+function setNameFeedback(message, isError = false) {
+  elements.nameFeedback.textContent = message;
+  elements.nameFeedback.className = `name-feedback${isError ? ' error' : ''}`;
+}
+
+function showSuggestions(names = []) {
+  elements.nameSuggestions.replaceChildren();
+  for (const name of names) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = name;
+    button.addEventListener('click', () => {
+      elements.playerName.value = name;
+      elements.playerName.focus();
+      setNameFeedback('Этот вариант свободен');
+      showSuggestions();
+    });
+    elements.nameSuggestions.append(button);
+  }
+}
+
+function rememberSession(name, token) {
+  const nameKey = name.toLocaleLowerCase('ru');
+  sessions.sessions = sessions.sessions.filter(
+    (item) => item.token !== token && item.name.toLocaleLowerCase('ru') !== nameKey,
+  );
+  sessions.sessions.unshift({ name, token });
+  activeToken = token;
+  saveSessions();
+}
+
+function removeSession(token) {
+  sessions.sessions = sessions.sessions.filter((item) => item.token !== token);
+  if (activeToken === token) activeToken = null;
+  saveSessions();
+}
+
 function renderProgress() {
-  const accuracy = Math.round(computeAccuracy(progress.totalSolved, progress.totalCorrect) * 100);
+  if (!profile || !progress) return;
+  const accuracy = Math.round((progress.accuracy ?? computeAccuracy(progress.totalSolved, progress.totalCorrect)) * 100);
+  setText('#header-player', profile.name);
+  setText('#welcome-name', profile.name);
+  setText('#welcome-round', progress.currentRound.number);
   setText('#welcome-level', progress.level);
   setText('#welcome-stars', progress.stars);
   setText('#level-value', progress.level);
   setText('#stars-value', progress.stars);
   setText('#streak-value', progress.currentStreak);
+  setText('#round-number', progress.currentRound.number);
+  setText('#round-count', `${progress.currentRound.answered} из 10`);
+  $('#round-progress').style.width = `${progress.currentRound.answered * 10}%`;
+  setText('#progress-player', profile.name);
   setText('#progress-level', progress.level);
   setText('#progress-stars', progress.stars);
   setText('#progress-best', progress.bestStreak);
   setText('#progress-accuracy', `${accuracy}%`);
   setText('#progress-solved', progress.totalSolved);
+  setText('#progress-rounds', progress.completedRounds);
 }
 
-function showScreen(name) {
-  const training = name === 'trainer';
-  elements.welcome.hidden = training;
-  elements.trainer.hidden = !training;
-  if (!training) renderProgress();
+async function activateSession(token) {
+  activeToken = token;
+  saveSessions();
+  setNameFeedback('Загружаю прогресс…');
+  try {
+    const payload = await api('/api/me');
+    profile = payload.profile;
+    progress = payload.progress;
+    rememberSession(profile.name, activeToken);
+    renderProgress();
+    showScreen('welcome');
+  } catch (error) {
+    if (error.status === 401) {
+      removeSession(token);
+      renderKnownPlayers();
+      setNameFeedback('Этот игрок больше недоступен. Введи новое имя.', true);
+    } else {
+      setNameFeedback(error.message, true);
+    }
+    showScreen('login');
+  }
 }
 
 function resetProblemUi() {
   answered = false;
+  submitting = false;
+  pendingRound = null;
   elements.input.disabled = false;
   elements.input.value = '';
   elements.input.removeAttribute('aria-invalid');
   elements.feedback.className = 'feedback';
   elements.feedback.textContent = 'Введи число';
+  elements.check.disabled = false;
   elements.check.textContent = 'Проверить';
   elements.card.classList.remove('is-correct', 'is-incorrect', 'level-up');
 }
@@ -102,6 +213,7 @@ function nextProblem({ focus = true } = {}) {
 
 function startTraining() {
   showScreen('trainer');
+  renderProgress();
   nextProblem();
 }
 
@@ -116,17 +228,28 @@ function showCelebration(message, levelUp = false) {
   }, 2600);
 }
 
-function celebrationMessage(events) {
-  const messages = [];
-  if (events.includes('level-up')) messages.push(`Уровень ${progress.level}!`);
-  if (events.includes('streak-10')) messages.push('10 верных подряд!');
-  else if (events.includes('streak-5')) messages.push('5 верных подряд!');
-  return messages.join(' ');
+function openRoundResult(round) {
+  setText('#round-title', `Раунд ${round.number} завершён!`);
+  setText('#round-score', `${round.correct} из ${round.total}`);
+  const message = round.correct === 10
+    ? 'Без единой ошибки — великолепно!'
+    : round.correct >= 7
+      ? 'Очень хороший результат!'
+      : 'Ты закончил раунд — продолжай тренироваться!';
+  setText('#round-message', message);
+  if (!elements.roundDialog.open) elements.roundDialog.showModal();
 }
 
-function submitAnswer() {
+function submissionId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function submitAnswer() {
+  if (submitting) return;
   if (answered) {
-    nextProblem();
+    if (pendingRound) openRoundResult(pendingRound);
+    else nextProblem();
     return;
   }
 
@@ -146,31 +269,60 @@ function submitAnswer() {
     return;
   }
 
-  const result = applyAnswer(progress, problem, value);
-  progress = result.state;
-  answered = true;
+  submitting = true;
   elements.input.disabled = true;
-  elements.check.textContent = 'Дальше →';
-  elements.input.removeAttribute('aria-invalid');
+  elements.check.disabled = true;
+  elements.check.textContent = 'Проверяю…';
+  try {
+    const result = await api('/api/answers', {
+      method: 'POST',
+      body: JSON.stringify({ ...problem, answer: value, submissionId: submissionId() }),
+    });
+    profile = result.profile;
+    progress = result.progress;
+    pendingRound = result.roundCompleted;
+    answered = true;
+    submitting = false;
+    elements.check.disabled = false;
+    elements.check.textContent = pendingRound ? 'Итоги раунда →' : 'Дальше →';
+    elements.input.removeAttribute('aria-invalid');
 
-  if (result.isCorrect) {
-    elements.card.classList.add('is-correct');
-    elements.feedback.className = 'feedback correct';
-    const record = result.events.includes('new-record') && progress.bestStreak > 1
-      ? ` Новый рекорд — ${progress.bestStreak} подряд!`
-      : '';
-    elements.feedback.textContent = `Верно! +1 звезда ★${record}`;
-    const message = celebrationMessage(result.events);
-    if (message) showCelebration(message, result.events.includes('level-up'));
-  } else {
-    elements.card.classList.add('is-incorrect');
-    elements.feedback.className = 'feedback incorrect';
-    elements.feedback.textContent = `Почти! Правильный ответ: ${problem.a * problem.b}`;
+    if (result.isCorrect) {
+      elements.card.classList.add('is-correct');
+      elements.feedback.className = 'feedback correct';
+      const record = result.events.includes('new-record') && progress.bestStreak > 1
+        ? ` Новый рекорд — ${progress.bestStreak} подряд!` : '';
+      elements.feedback.textContent = `Верно! +1 звезда ★${record}`;
+      const messages = [];
+      if (result.events.includes('level-up')) messages.push(`Уровень ${progress.level}!`);
+      if (result.events.includes('streak-10')) messages.push('10 верных подряд!');
+      else if (result.events.includes('streak-5')) messages.push('5 верных подряд!');
+      if (messages.length) showCelebration(messages.join(' '), result.events.includes('level-up'));
+    } else {
+      elements.card.classList.add('is-incorrect');
+      elements.feedback.className = 'feedback incorrect';
+      elements.feedback.textContent = `Почти! Правильный ответ: ${result.correctAnswer}`;
+    }
+    renderProgress();
+    if (pendingRound) {
+      setText('#round-number', pendingRound.number);
+      setText('#round-count', '10 из 10');
+      $('#round-progress').style.width = '100%';
+    }
+    elements.check.focus({ preventScroll: true });
+  } catch (error) {
+    submitting = false;
+    elements.input.disabled = false;
+    elements.check.disabled = false;
+    elements.check.textContent = 'Попробовать снова';
+    elements.feedback.className = 'feedback validation';
+    elements.feedback.textContent = error.message;
+    if (error.status === 401) {
+      removeSession(activeToken);
+      renderKnownPlayers();
+      showScreen('login');
+    }
   }
-
-  saveProgress();
-  renderProgress();
-  elements.check.focus({ preventScroll: true });
 }
 
 function openProgress() {
@@ -182,17 +334,54 @@ function closeDialog(dialog) {
   if (dialog.open) dialog.close();
 }
 
+async function createPlayer(event) {
+  event.preventDefault();
+  const name = elements.playerName.value.trim();
+  const local = sessions.sessions.find((item) => item.name.localeCompare(name, 'ru', { sensitivity: 'accent' }) === 0);
+  if (local) {
+    await activateSession(local.token);
+    return;
+  }
+  elements.playerSubmit.disabled = true;
+  elements.playerSubmit.textContent = 'Создаю игрока…';
+  showSuggestions();
+  try {
+    const claimedLegacy = elements.claimLegacy.checked ? legacyProgress() : null;
+    const payload = await api('/api/profiles', {
+      method: 'POST', auth: false,
+      body: JSON.stringify({ name, existingProgress: claimedLegacy }),
+    });
+    activeToken = payload.sessionToken;
+    profile = payload.profile;
+    progress = payload.progress;
+    rememberSession(profile.name, activeToken);
+    if (claimedLegacy) {
+      localStorage.removeItem(LEGACY_PROGRESS_KEY);
+      elements.legacyOption.hidden = true;
+      elements.claimLegacy.checked = false;
+    }
+    elements.playerName.value = '';
+    renderProgress();
+    showScreen('welcome');
+  } catch (error) {
+    setNameFeedback(error.message, true);
+    if (error.payload?.suggestions) showSuggestions(error.payload.suggestions);
+    elements.playerName.focus();
+  } finally {
+    elements.playerSubmit.disabled = false;
+    elements.playerSubmit.textContent = 'Продолжить →';
+  }
+}
+
+elements.playerForm.addEventListener('submit', createPlayer);
+elements.playerName.addEventListener('input', () => { setNameFeedback('От 2 до 20 букв или цифр'); showSuggestions(); });
 elements.start.addEventListener('click', startTraining);
-elements.home.addEventListener('click', () => showScreen('welcome'));
+elements.home.addEventListener('click', () => { if (profile) showScreen('welcome'); });
+elements.switchPlayer.addEventListener('click', () => { closeDialog(elements.progressDialog); renderKnownPlayers(); showScreen('login'); });
 elements.progressButton.addEventListener('click', openProgress);
 elements.closeProgress.addEventListener('click', () => closeDialog(elements.progressDialog));
-elements.progressDialog.addEventListener('click', (event) => {
-  if (event.target === elements.progressDialog) closeDialog(elements.progressDialog);
-});
-elements.form.addEventListener('submit', (event) => {
-  event.preventDefault();
-  submitAnswer();
-});
+elements.progressDialog.addEventListener('click', (event) => { if (event.target === elements.progressDialog) closeDialog(elements.progressDialog); });
+elements.form.addEventListener('submit', (event) => { event.preventDefault(); submitAnswer(); });
 elements.input.addEventListener('input', () => {
   elements.input.removeAttribute('aria-invalid');
   if (!answered && elements.feedback.classList.contains('validation')) {
@@ -200,39 +389,46 @@ elements.input.addEventListener('input', () => {
     elements.feedback.textContent = 'Введи число';
   }
 });
-elements.restart.addEventListener('click', () => {
-  nextProblem();
-  showCelebration('Новая тренировка! Прогресс сохранён.');
-});
-
-elements.resetProgress.addEventListener('click', () => {
-  closeDialog(elements.progressDialog);
-  elements.confirmDialog.showModal();
-});
-elements.cancelReset.addEventListener('click', () => {
-  closeDialog(elements.confirmDialog);
-  openProgress();
-});
-elements.confirmReset.addEventListener('click', () => {
-  progress = defaultState();
-  saveProgress();
+elements.backToWelcome.addEventListener('click', () => showScreen('welcome'));
+elements.nextRound.addEventListener('click', () => {
+  closeDialog(elements.roundDialog);
+  pendingRound = null;
+  showScreen('trainer');
   renderProgress();
-  closeDialog(elements.confirmDialog);
-  showScreen('welcome');
-  showCelebration('Готово. Начнём новое приключение!');
+  nextProblem();
 });
+elements.roundDialog.addEventListener('cancel', (event) => event.preventDefault());
 
-elements.confirmDialog.addEventListener('cancel', (event) => {
-  event.preventDefault();
-  closeDialog(elements.confirmDialog);
-  openProgress();
+elements.resetProgress.addEventListener('click', () => { closeDialog(elements.progressDialog); elements.confirmDialog.showModal(); });
+elements.cancelReset.addEventListener('click', () => { closeDialog(elements.confirmDialog); openProgress(); });
+elements.confirmReset.addEventListener('click', async () => {
+  elements.confirmReset.disabled = true;
+  try {
+    const payload = await api('/api/progress/reset', { method: 'POST', body: '{}' });
+    profile = payload.profile;
+    progress = payload.progress;
+    renderProgress();
+    closeDialog(elements.confirmDialog);
+    showScreen('welcome');
+    showCelebration('Готово. Начнём новое приключение!');
+  } catch (error) {
+    closeDialog(elements.confirmDialog);
+    showCelebration(error.message);
+  } finally {
+    elements.confirmReset.disabled = false;
+  }
 });
+elements.confirmDialog.addEventListener('cancel', (event) => { event.preventDefault(); closeDialog(elements.confirmDialog); openProgress(); });
 
-renderProgress();
-showScreen('welcome');
+async function init() {
+  renderKnownPlayers();
+  elements.legacyOption.hidden = !legacyProgress();
+  if (activeToken) await activateSession(activeToken);
+  else showScreen('login');
+}
+
+init();
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
-  });
+  window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
 }

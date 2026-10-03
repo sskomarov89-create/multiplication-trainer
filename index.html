@@ -21,26 +21,56 @@
       <button class="brand" id="home-button" type="button" aria-label="На главный экран">
         <span aria-hidden="true">✦</span> Умножайка
       </button>
-      <button class="progress-button" id="progress-button" type="button" aria-haspopup="dialog">
-        <span aria-hidden="true">★</span> Мой прогресс
-      </button>
+      <div class="topbar-actions" id="app-actions" hidden>
+        <button class="player-button" id="switch-player" type="button" aria-label="Сменить игрока"><span id="header-player"></span> ▾</button>
+        <button class="progress-button" id="progress-button" type="button" aria-haspopup="dialog"><span aria-hidden="true">★</span> Прогресс</button>
+      </div>
     </header>
 
-    <section class="screen welcome-screen" id="welcome-screen" aria-labelledby="welcome-title">
+    <section class="screen login-screen" id="login-screen" aria-labelledby="login-title">
+      <div class="login-card">
+        <div class="hero-orbit small" aria-hidden="true"><span>2</span><span>×</span><span>5</span></div>
+        <p class="eyebrow">Добро пожаловать!</p>
+        <h1 id="login-title">Кто сегодня играет?</h1>
+        <p class="login-copy">Выбери своё имя, чтобы звёзды и рекорды не перепутались.</p>
+        <div class="known-players" id="known-players" aria-label="Игроки на этом устройстве" hidden>
+          <p>Продолжить игру</p>
+          <div id="known-player-buttons"></div>
+          <div class="or-divider"><span>или</span></div>
+        </div>
+        <form id="player-form" novalidate>
+          <label for="player-name">Новое имя</label>
+          <input id="player-name" name="name" type="text" autocomplete="name" enterkeyhint="go" maxlength="20" placeholder="Например, Маша" aria-describedby="name-feedback">
+          <p class="name-feedback" id="name-feedback" aria-live="polite">От 2 до 20 букв или цифр</p>
+          <div class="name-suggestions" id="name-suggestions" aria-label="Свободные варианты"></div>
+          <label class="legacy-progress-option" id="legacy-progress-option" hidden>
+            <input id="claim-legacy-progress" type="checkbox">
+            <span>Перенести сюда мои старые звёзды</span>
+          </label>
+          <button class="primary-button start-button" id="player-submit" type="submit">Продолжить <span aria-hidden="true">→</span></button>
+        </form>
+      </div>
+    </section>
+
+    <section class="screen welcome-screen" id="welcome-screen" aria-labelledby="welcome-title" hidden>
       <div class="hero-orbit" aria-hidden="true"><span>2</span><span>×</span><span>5</span></div>
-      <p class="eyebrow">Таблица умножения 1–10</p>
-      <h1 id="welcome-title">Считай.<br><span>Собирай звёзды.</span></h1>
-      <p class="welcome-copy">Решай примеры в своём темпе.<br>Ошибаться можно!</p>
-      <button class="primary-button start-button" id="start-button" type="button">Начать <span aria-hidden="true">→</span></button>
+      <p class="eyebrow">Привет, <span id="welcome-name"></span>!</p>
+      <h1 id="welcome-title">Готов к раунду?</h1>
+      <p class="welcome-copy">В каждом раунде ровно 10 примеров.<br>В конце увидишь свой результат!</p>
+      <button class="primary-button start-button" id="start-button" type="button">Начать раунд <span aria-hidden="true">→</span></button>
       <div class="welcome-stats" aria-label="Текущий прогресс">
-        <span><strong id="welcome-level">1</strong> уровень</span>
-        <span aria-hidden="true">•</span>
-        <span><strong id="welcome-stars">0</strong> ★</span>
+        <span>Раунд <strong id="welcome-round">1</strong></span><span aria-hidden="true">•</span>
+        <span><strong id="welcome-stars">0</strong> ★</span><span aria-hidden="true">•</span>
+        <span>уровень <strong id="welcome-level">1</strong></span>
       </div>
     </section>
 
     <section class="screen trainer-screen" id="trainer-screen" aria-labelledby="trainer-title" hidden>
       <h1 class="visually-hidden" id="trainer-title">Тренировка</h1>
+      <div class="round-panel" aria-label="Прогресс раунда">
+        <div class="round-label"><span>Раунд <strong id="round-number">1</strong></span><span id="round-count">0 из 10</span></div>
+        <div class="round-track"><span id="round-progress" style="width: 0%"></span></div>
+      </div>
       <div class="quick-stats" aria-label="Краткий прогресс">
         <span class="level-pill">Уровень <strong id="level-value">1</strong></span>
         <span class="star-pill"><span aria-hidden="true">★</span> <strong id="stars-value">0</strong></span>
@@ -52,7 +82,6 @@
         <div class="problem" id="problem" aria-live="polite">
           <span id="factor-a">7</span><span class="operator">×</span><span id="factor-b">8</span><span class="equals">=</span><span class="question">?</span>
         </div>
-
         <form id="answer-form" novalidate>
           <label for="answer-input">Твой ответ</label>
           <input id="answer-input" name="answer" type="text" inputmode="numeric" enterkeyhint="done" pattern="[0-9]*" maxlength="3" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="feedback">
@@ -60,8 +89,7 @@
           <button class="primary-button check-button" id="check-button" type="submit">Проверить</button>
         </form>
       </div>
-
-      <button class="text-button restart-button" id="restart-button" type="button"><span aria-hidden="true">↻</span> Начать заново</button>
+      <button class="text-button restart-button" id="back-to-welcome" type="button">← Вернуться в начало</button>
     </section>
   </main>
 
@@ -69,28 +97,35 @@
     <span aria-hidden="true">✦</span><strong id="celebration-text"></strong><span aria-hidden="true">✦</span>
   </div>
 
+  <dialog class="round-dialog" id="round-dialog" aria-labelledby="round-title">
+    <div class="round-trophy" aria-hidden="true">★</div>
+    <p class="eyebrow">Отличная работа!</p>
+    <h2 id="round-title">Раунд завершён!</h2>
+    <p class="round-score"><strong id="round-score">8 из 10</strong><span>правильных ответов</span></p>
+    <p id="round-message">Ты здорово постарался!</p>
+    <button class="primary-button" id="next-round" type="button">Следующий раунд →</button>
+  </dialog>
+
   <dialog class="progress-dialog" id="progress-dialog" aria-labelledby="progress-title">
     <div class="dialog-head">
-      <div><p class="eyebrow">Так держать!</p><h2 id="progress-title">Мой прогресс</h2></div>
+      <div><p class="eyebrow" id="progress-player"></p><h2 id="progress-title">Мой прогресс</h2></div>
       <button class="icon-button" id="close-progress" type="button" aria-label="Закрыть">×</button>
     </div>
-    <div class="level-card">
-      <span class="level-badge" aria-hidden="true">↑</span>
-      <div><span>Текущий уровень</span><strong id="progress-level">1</strong></div>
-    </div>
+    <div class="level-card"><span class="level-badge" aria-hidden="true">↑</span><div><span>Текущий уровень</span><strong id="progress-level">1</strong></div></div>
     <div class="stat-grid">
       <div><span aria-hidden="true">★</span><strong id="progress-stars">0</strong><small>звёзд</small></div>
       <div><span aria-hidden="true">↗</span><strong id="progress-best">0</strong><small>лучшая серия</small></div>
       <div><span aria-hidden="true">◎</span><strong id="progress-accuracy">0%</strong><small>верных</small></div>
       <div><span aria-hidden="true">✓</span><strong id="progress-solved">0</strong><small>решено</small></div>
     </div>
+    <p class="rounds-done">Завершено раундов: <strong id="progress-rounds">0</strong></p>
     <button class="danger-text-button" id="reset-progress" type="button">Сбросить прогресс</button>
   </dialog>
 
   <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
     <div class="confirm-icon" aria-hidden="true">↻</div>
     <h2 id="confirm-title">Сбросить прогресс?</h2>
-    <p>Звёзды, уровень и рекорды начнутся сначала.</p>
+    <p>Звёзды, уровни, раунды и рекорды начнутся сначала.</p>
     <div class="confirm-actions">
       <button class="secondary-button" id="cancel-reset" type="button">Не сбрасывать</button>
       <button class="reset-button" id="confirm-reset" type="button">Да, сбросить</button>

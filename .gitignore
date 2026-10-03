@@ -1,5 +1,7 @@
 node_modules/
+__pycache__/
 .playwright/
 test-results/
+data/*.sqlite3*
 *.log
 .DS_Store

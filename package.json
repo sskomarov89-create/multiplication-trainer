@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/core.test.js tests/static.test.js",
+    "test:js": "node --test tests/core.test.js tests/static.test.js",
+    "test:py": "python3 -m unittest tests/test_server.py tests/test_api.py",
+    "test": "npm run test:js && npm run test:py",
     "uat": "node tests/uat.mjs",
-    "serve": "python3 -m http.server 4173",
+    "serve": "python3 server.py --port 4173",
     "check": "npm test && npm run uat"
   },
   "engines": {

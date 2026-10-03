@@ -16,12 +16,33 @@ describe('static PWA shell', () => {
     assert.match(html, /lang="ru"/);
   });
 
-  test('answer control is numeric-keyboard friendly and accessible', async () => {
+  test('name entry and answer controls are mobile-friendly and accessible', async () => {
     const html = await read('index.html');
+    assert.match(html, /id="player-form"/);
+    assert.match(html, /id="player-name"/);
+    assert.match(html, /id="claim-legacy-progress"/);
+    assert.match(html, /autocomplete="name"/);
     assert.match(html, /id="answer-input"/);
     assert.match(html, /inputmode="numeric"/);
     assert.match(html, /enterkeyhint="done"/);
     assert.match(html, /aria-live="polite"/);
+  });
+
+  test('training exposes an explicit ten-question round and completion dialog', async () => {
+    const html = await read('index.html');
+    assert.match(html, /id="round-number"/);
+    assert.match(html, /id="round-count"/);
+    assert.match(html, /id="round-progress"/);
+    assert.match(html, /id="round-dialog"/);
+    assert.match(html, /id="round-score"/);
+  });
+
+  test('browser app uses the same-origin profile and answer APIs', async () => {
+    const app = await read('src/app.js');
+    assert.match(app, /\/api\/profiles/);
+    assert.match(app, /\/api\/me/);
+    assert.match(app, /\/api\/answers/);
+    assert.match(app, /\/api\/progress\/reset/);
   });
 
   test('manifest describes a standalone installable app with icons', async () => {
