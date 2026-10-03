@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#6750d8">
+  <meta name="description" content="Весёлая тренировка таблицы умножения от 1 до 10">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Умножайка">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Умножайка</title>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <button class="brand" id="home-button" type="button" aria-label="На главный экран">
+        <span aria-hidden="true">✦</span> Умножайка
+      </button>
+      <button class="progress-button" id="progress-button" type="button" aria-haspopup="dialog">
+        <span aria-hidden="true">★</span> Мой прогресс
+      </button>
+    </header>
+
+    <section class="screen welcome-screen" id="welcome-screen" aria-labelledby="welcome-title">
+      <div class="hero-orbit" aria-hidden="true"><span>2</span><span>×</span><span>5</span></div>
+      <p class="eyebrow">Таблица умножения 1–10</p>
+      <h1 id="welcome-title">Считай.<br><span>Собирай звёзды.</span></h1>
+      <p class="welcome-copy">Решай примеры в своём темпе.<br>Ошибаться можно!</p>
+      <button class="primary-button start-button" id="start-button" type="button">Начать <span aria-hidden="true">→</span></button>
+      <div class="welcome-stats" aria-label="Текущий прогресс">
+        <span><strong id="welcome-level">1</strong> уровень</span>
+        <span aria-hidden="true">•</span>
+        <span><strong id="welcome-stars">0</strong> ★</span>
+      </div>
+    </section>
+
+    <section class="screen trainer-screen" id="trainer-screen" aria-labelledby="trainer-title" hidden>
+      <h1 class="visually-hidden" id="trainer-title">Тренировка</h1>
+      <div class="quick-stats" aria-label="Краткий прогресс">
+        <span class="level-pill">Уровень <strong id="level-value">1</strong></span>
+        <span class="star-pill"><span aria-hidden="true">★</span> <strong id="stars-value">0</strong></span>
+        <span class="streak-pill">Серия <strong id="streak-value">0</strong></span>
+      </div>
+
+      <div class="practice-card" id="practice-card">
+        <p class="prompt">Сколько получится?</p>
+        <div class="problem" id="problem" aria-live="polite">
+          <span id="factor-a">7</span><span class="operator">×</span><span id="factor-b">8</span><span class="equals">=</span><span class="question">?</span>
+        </div>
+
+        <form id="answer-form" novalidate>
+          <label for="answer-input">Твой ответ</label>
+          <input id="answer-input" name="answer" type="text" inputmode="numeric" enterkeyhint="done" pattern="[0-9]*" maxlength="3" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="feedback">
+          <p class="feedback" id="feedback" aria-live="polite">Введи число</p>
+          <button class="primary-button check-button" id="check-button" type="submit">Проверить</button>
+        </form>
+      </div>
+
+      <button class="text-button restart-button" id="restart-button" type="button"><span aria-hidden="true">↻</span> Начать заново</button>
+    </section>
+  </main>
+
+  <div class="celebration" id="celebration" aria-live="polite" aria-atomic="true" hidden>
+    <span aria-hidden="true">✦</span><strong id="celebration-text"></strong><span aria-hidden="true">✦</span>
+  </div>
+
+  <dialog class="progress-dialog" id="progress-dialog" aria-labelledby="progress-title">
+    <div class="dialog-head">
+      <div><p class="eyebrow">Так держать!</p><h2 id="progress-title">Мой прогресс</h2></div>
+      <button class="icon-button" id="close-progress" type="button" aria-label="Закрыть">×</button>
+    </div>
+    <div class="level-card">
+      <span class="level-badge" aria-hidden="true">↑</span>
+      <div><span>Текущий уровень</span><strong id="progress-level">1</strong></div>
+    </div>
+    <div class="stat-grid">
+      <div><span aria-hidden="true">★</span><strong id="progress-stars">0</strong><small>звёзд</small></div>
+      <div><span aria-hidden="true">↗</span><strong id="progress-best">0</strong><small>лучшая серия</small></div>
+      <div><span aria-hidden="true">◎</span><strong id="progress-accuracy">0%</strong><small>верных</small></div>
+      <div><span aria-hidden="true">✓</span><strong id="progress-solved">0</strong><small>решено</small></div>
+    </div>
+    <button class="danger-text-button" id="reset-progress" type="button">Сбросить прогресс</button>
+  </dialog>
+
+  <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
+    <div class="confirm-icon" aria-hidden="true">↻</div>
+    <h2 id="confirm-title">Сбросить прогресс?</h2>
+    <p>Звёзды, уровень и рекорды начнутся сначала.</p>
+    <div class="confirm-actions">
+      <button class="secondary-button" id="cancel-reset" type="button">Не сбрасывать</button>
+      <button class="reset-button" id="confirm-reset" type="button">Да, сбросить</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
