@@ -59,6 +59,15 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(me["profile"]["name"], "Маша")
 
+        status, returned = self.request("POST", "/api/sessions", {"name": "маша"})
+        self.assertEqual(status, 200)
+        self.assertEqual(returned["profile"]["name"], "Маша")
+        self.assertNotEqual(returned["sessionToken"], token)
+
+        status, missing = self.request("POST", "/api/sessions", {"name": "Никого"})
+        self.assertEqual(status, 404)
+        self.assertEqual(missing["error"], "player_not_found")
+
         status, result = self.request("POST", "/api/answers", {
             "a": 7, "b": 8, "answer": "56", "submissionId": "integration-answer-1"
         }, token)

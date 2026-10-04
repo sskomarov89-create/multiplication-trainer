@@ -47,6 +47,10 @@ class InvalidAnswerError(ValueError):
     pass
 
 
+class PlayerNotFoundError(ValueError):
+    pass
+
+
 def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -172,6 +176,9 @@ def open_database(path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA journal_mode = WAL")
     connection.execute("PRAGMA busy_timeout = 10000")
+    sessions_table_existed = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='profile_sessions'"
+    ).fetchone() is not None
     connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS profiles (
@@ -209,6 +216,15 @@ def open_database(path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
             created_at TEXT NOT NULL,
             PRIMARY KEY(profile_id, submission_id)
         );
+
+        CREATE TABLE IF NOT EXISTS profile_sessions (
+            token_hash TEXT PRIMARY KEY,
+            profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_profile_sessions_profile
+            ON profile_sessions(profile_id);
         """
     )
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(profiles)")}
@@ -224,6 +240,11 @@ def open_database(path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
         except Exception:
             connection.rollback()
             raise
+    if not sessions_table_existed:
+        connection.execute(
+            "INSERT OR IGNORE INTO profile_sessions (token_hash, profile_id, created_at) "
+            "SELECT token_hash, id, created_at FROM profiles"
+        )
     return connection
 
 
@@ -283,7 +304,12 @@ def profile_row_by_token(connection: sqlite3.Connection, token: str) -> sqlite3.
     if not isinstance(token, str) or len(token) < 32:
         raise InvalidTokenError("invalid_session")
     row = connection.execute(
-        "SELECT * FROM profiles WHERE token_hash = ?", (token_hash(token),)
+        """
+        SELECT profiles.* FROM profiles
+        JOIN profile_sessions ON profile_sessions.profile_id = profiles.id
+        WHERE profile_sessions.token_hash = ?
+        """,
+        (token_hash(token),),
     ).fetchone()
     if row is None:
         raise InvalidTokenError("invalid_session")
@@ -324,6 +350,10 @@ def register_profile(
             ),
         )
         row = connection.execute("SELECT * FROM profiles WHERE name_key = ?", (name_key,)).fetchone()
+        connection.execute(
+            "INSERT INTO profile_sessions (token_hash, profile_id, created_at) VALUES (?, ?, ?)",
+            (token_hash(token), row["id"], timestamp),
+        )
         connection.commit()
     except sqlite3.IntegrityError as error:
         connection.rollback()
@@ -337,6 +367,39 @@ def register_profile(
 
 def get_profile_by_token(connection: sqlite3.Connection, token: str) -> dict[str, Any]:
     return row_payload(profile_row_by_token(connection, token))
+
+
+def login_by_name(connection: sqlite3.Connection, raw_name: Any) -> dict[str, Any]:
+    _name, name_key = normalize_name(raw_name)
+    token = secrets.token_urlsafe(32)
+    timestamp = now_iso()
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        row = connection.execute("SELECT * FROM profiles WHERE name_key = ?", (name_key,)).fetchone()
+        if row is None:
+            raise PlayerNotFoundError("player_not_found")
+        connection.execute(
+            "INSERT INTO profile_sessions (token_hash, profile_id, created_at) VALUES (?, ?, ?)",
+            (token_hash(token), row["id"], timestamp),
+        )
+        connection.execute(
+            """
+            DELETE FROM profile_sessions
+            WHERE profile_id = ? AND rowid NOT IN (
+                SELECT rowid FROM profile_sessions
+                WHERE profile_id = ?
+                ORDER BY created_at DESC, rowid DESC LIMIT 20
+            )
+            """,
+            (row["id"], row["id"]),
+        )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    payload = row_payload(row)
+    payload["sessionToken"] = token
+    return payload
 
 
 def leaderboard_entry(row: sqlite3.Row, position: int) -> dict[str, Any]:
@@ -612,6 +675,11 @@ class AppHandler(SimpleHTTPRequestHandler):
                     payload = register_profile(database, data.get("name"), data.get("existingProgress"))
                 self.send_json(HTTPStatus.CREATED, payload)
                 return
+            if path == "/api/sessions":
+                with closing(self.database()) as database:
+                    payload = login_by_name(database, data.get("name"))
+                self.send_json(HTTPStatus.OK, payload)
+                return
             if path == "/api/answers":
                 with closing(self.database()) as database:
                     payload = record_answer(
@@ -640,6 +708,11 @@ class AppHandler(SimpleHTTPRequestHandler):
                     "message": "Это имя уже занято. Попробуй другое.",
                     "suggestions": error.suggestions,
                 },
+            )
+        except PlayerNotFoundError:
+            self.send_json(
+                HTTPStatus.NOT_FOUND,
+                {"error": "player_not_found", "message": "Такого игрока пока нет."},
             )
         except InvalidTokenError:
             self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "invalid_session"})

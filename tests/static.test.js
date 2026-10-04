@@ -40,6 +40,7 @@ describe('static PWA shell', () => {
   test('browser app uses the same-origin profile and answer APIs', async () => {
     const app = await read('src/app.js');
     assert.match(app, /\/api\/profiles/);
+    assert.match(app, /\/api\/sessions/);
     assert.match(app, /\/api\/me/);
     assert.match(app, /\/api\/answers/);
     assert.match(app, /\/api\/progress\/reset/);

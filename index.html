@@ -32,16 +32,17 @@
         <div class="hero-orbit small" aria-hidden="true"><span>2</span><span>×</span><span>5</span></div>
         <p class="eyebrow">Добро пожаловать!</p>
         <h1 id="login-title">Кто сегодня играет?</h1>
-        <p class="login-copy">Придумай игровое имя — его увидят в общем рейтинге.</p>
+        <p class="login-copy">Введи игровое имя. Если оно уже есть, откроется его прогресс. Имя увидят в общем рейтинге.</p>
         <div class="known-players" id="known-players" aria-label="Игроки на этом устройстве" hidden>
           <p>Продолжить игру</p>
           <div id="known-player-buttons"></div>
           <div class="or-divider"><span>или</span></div>
         </div>
         <form id="player-form" novalidate>
-          <label for="player-name">Новое имя</label>
+          <label for="player-name">Игровое имя</label>
           <input id="player-name" name="name" type="text" autocomplete="name" enterkeyhint="go" maxlength="20" placeholder="Например, Маша" aria-describedby="name-feedback">
-          <p class="name-feedback" id="name-feedback" aria-live="polite">От 2 до 20 букв или цифр</p>
+          <p class="name-feedback" id="name-feedback" aria-live="polite">Новое имя создаст игрока, знакомое — откроет прогресс</p>
+          <p class="name-access-note"><strong>Для взрослых:</strong> имя — не пароль. Кто знает имя, сможет открыть этот прогресс.</p>
           <div class="name-suggestions" id="name-suggestions" aria-label="Свободные варианты"></div>
           <label class="legacy-progress-option" id="legacy-progress-option" hidden>
             <input id="claim-legacy-progress" type="checkbox">

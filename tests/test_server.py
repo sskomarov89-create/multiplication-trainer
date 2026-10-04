@@ -8,7 +8,9 @@ from server import (
     grade_for_stars,
     InvalidNameError,
     NameTakenError,
+    PlayerNotFoundError,
     get_profile_by_token,
+    login_by_name,
     open_database,
     record_answer,
     register_profile,
@@ -41,6 +43,20 @@ class ProfileAndRoundTests(unittest.TestCase):
             register_profile(self.db, "мАшА")
         self.assertGreaterEqual(len(error.exception.suggestions), 2)
         self.assertTrue(all(name.casefold() != "маша" for name in error.exception.suggestions))
+
+    def test_existing_name_can_login_from_another_browser_with_a_new_session(self):
+        created = register_profile(self.db, "Маша")
+        record_answer(self.db, created["sessionToken"], 2, 5, "10", "first-device-answer")
+        returned = login_by_name(self.db, "мАшА")
+        self.assertNotEqual(returned["sessionToken"], created["sessionToken"])
+        self.assertEqual(returned["profile"]["name"], "Маша")
+        self.assertEqual(returned["progress"]["stars"], 1)
+        self.assertEqual(get_profile_by_token(self.db, created["sessionToken"])["progress"]["stars"], 1)
+        self.assertEqual(get_profile_by_token(self.db, returned["sessionToken"])["progress"]["stars"], 1)
+
+    def test_unknown_name_cannot_create_a_session(self):
+        with self.assertRaises(PlayerNotFoundError):
+            login_by_name(self.db, "Нет такого")
 
     def test_rejects_empty_short_long_and_symbol_only_names(self):
         for name in ("", " ", "А", "A" * 21, "***"):
@@ -217,6 +233,8 @@ class ProfileAndRoundTests(unittest.TestCase):
         migrated = open_database(path)
         row = migrated.execute("SELECT stars, ranked_stars FROM profiles WHERE id=1").fetchone()
         self.assertEqual((row["stars"], row["ranked_stars"]), (7, 7))
+        session = migrated.execute("SELECT token_hash, profile_id FROM profile_sessions").fetchone()
+        self.assertEqual((session["token_hash"], session["profile_id"]), ("hash", 1))
         migrated.close()
 
 

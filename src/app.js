@@ -430,14 +430,25 @@ async function createPlayer(event) {
     return;
   }
   elements.playerSubmit.disabled = true;
-  elements.playerSubmit.textContent = 'Создаю игрока…';
+  elements.playerSubmit.textContent = 'Ищу игрока…';
   showSuggestions();
   try {
-    const claimedLegacy = elements.claimLegacy.checked ? legacyProgress() : null;
-    const payload = await api('/api/profiles', {
-      method: 'POST', auth: false,
-      body: JSON.stringify({ name, existingProgress: claimedLegacy }),
-    });
+    let payload;
+    let claimedLegacy = null;
+    try {
+      payload = await api('/api/sessions', {
+        method: 'POST', auth: false,
+        body: JSON.stringify({ name }),
+      });
+    } catch (error) {
+      if (error.status !== 404 || error.payload?.error !== 'player_not_found') throw error;
+      elements.playerSubmit.textContent = 'Создаю игрока…';
+      claimedLegacy = elements.claimLegacy.checked ? legacyProgress() : null;
+      payload = await api('/api/profiles', {
+        method: 'POST', auth: false,
+        body: JSON.stringify({ name, existingProgress: claimedLegacy }),
+      });
+    }
     activeToken = payload.sessionToken;
     profile = payload.profile;
     progress = payload.progress;
@@ -462,7 +473,7 @@ async function createPlayer(event) {
 }
 
 elements.playerForm.addEventListener('submit', createPlayer);
-elements.playerName.addEventListener('input', () => { setNameFeedback('От 2 до 20 букв или цифр'); showSuggestions(); });
+elements.playerName.addEventListener('input', () => { setNameFeedback('Новое имя создаст игрока, знакомое — откроет прогресс'); showSuggestions(); });
 elements.start.addEventListener('click', startTraining);
 elements.home.addEventListener('click', () => { if (profile) showScreen('welcome'); });
 elements.switchPlayer.addEventListener('click', () => {
