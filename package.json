@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:js": "node --test tests/core.test.js tests/static.test.js",
+    "test:js": "node --test tests/core.test.js tests/sounds.test.js tests/static.test.js",
     "test:py": "python3 -m unittest tests/test_server.py tests/test_api.py",
     "test": "npm run test:js && npm run test:py",
     "uat": "node tests/uat.mjs",

@@ -582,7 +582,7 @@ class AppHandler(SimpleHTTPRequestHandler):
     database_path = DEFAULT_DB_PATH
     allowed_static_paths = {
         "/", "/index.html", "/styles.css", "/manifest.webmanifest", "/service-worker.js",
-        "/src/app.js", "/src/core.js", "/assets/icon.svg", "/assets/icon-192.png",
+        "/src/app.js", "/src/core.js", "/src/sounds.js", "/assets/icon.svg", "/assets/icon-192.png",
         "/assets/icon-512.png",
     }
 

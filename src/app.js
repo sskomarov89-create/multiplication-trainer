@@ -1,4 +1,5 @@
 import { computeAccuracy, generateExample } from './core.js';
+import { createAnswerSoundPlayer } from './sounds.js';
 
 const SESSION_KEY = 'umnozhayka.sessions.v1';
 const LEGACY_PROGRESS_KEY = 'umnozhayka.progress.v1';
@@ -14,7 +15,8 @@ const elements = {
   start: $('#start-button'), progressButton: $('#progress-button'), progressDialog: $('#progress-dialog'),
   closeProgress: $('#close-progress'), form: $('#answer-form'), input: $('#answer-input'),
   feedback: $('#feedback'), check: $('#check-button'), card: $('#practice-card'),
-  factorA: $('#factor-a'), factorB: $('#factor-b'), backToWelcome: $('#back-to-welcome'),
+  factorA: $('#factor-a'), factorB: $('#factor-b'), answerResult: $('#answer-result'),
+  backToWelcome: $('#back-to-welcome'),
   celebration: $('#celebration'), celebrationText: $('#celebration-text'),
   resetProgress: $('#reset-progress'), confirmDialog: $('#confirm-dialog'),
   cancelReset: $('#cancel-reset'), confirmReset: $('#confirm-reset'),
@@ -34,6 +36,7 @@ let submitting = false;
 let pendingRound = null;
 let celebrationTimer = null;
 let leaderboard = null;
+const answerSounds = createAnswerSoundPlayer(window.AudioContext || window.webkitAudioContext);
 
 class ApiError extends Error {
   constructor(status, payload) {
@@ -276,6 +279,7 @@ function resetProblemUi() {
   pendingRound = null;
   elements.input.disabled = false;
   elements.input.value = '';
+  elements.answerResult.textContent = '?';
   elements.input.removeAttribute('aria-invalid');
   elements.feedback.className = 'feedback';
   elements.feedback.textContent = 'Введи число';
@@ -352,6 +356,7 @@ async function submitAnswer() {
   }
 
   submitting = true;
+  answerSounds.prepare();
   elements.input.disabled = true;
   elements.check.disabled = true;
   elements.check.textContent = 'Проверяю…';
@@ -368,6 +373,8 @@ async function submitAnswer() {
     elements.check.disabled = false;
     elements.check.textContent = pendingRound ? 'Итоги раунда →' : 'Дальше →';
     elements.input.removeAttribute('aria-invalid');
+    elements.answerResult.textContent = String(result.correctAnswer);
+    answerSounds.play(result.isCorrect ? 'correct' : 'incorrect');
 
     if (result.isCorrect) {
       elements.card.classList.add('is-correct');

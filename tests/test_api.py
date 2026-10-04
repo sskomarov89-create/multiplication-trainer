@@ -89,6 +89,9 @@ class ApiIntegrationTests(unittest.TestCase):
         with urlopen(f"{self.base}/", timeout=3) as response:
             self.assertEqual(response.status, 200)
             self.assertIn("Умножайка", response.read().decode())
+        with urlopen(f"{self.base}/src/sounds.js", timeout=3) as response:
+            self.assertEqual(response.status, 200)
+            self.assertIn("createAnswerSoundPlayer", response.read().decode())
         status, health = self.request("GET", "/healthz")
         self.assertEqual(status, 200)
         self.assertEqual(health, {"status": "ok"})

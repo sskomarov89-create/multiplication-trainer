@@ -90,6 +90,17 @@ try {
   await page.locator('#feedback.incorrect').waitFor();
   assert.match(await page.locator('#feedback').textContent(), new RegExp(String(correct)));
   assert.equal(await page.locator('#round-count').textContent(), '1 из 10');
+  assert.equal(await page.locator('#answer-result').textContent(), String(correct));
+  const incorrectVisual = await page.locator('#practice-card').evaluate((element) => ({
+    animationName: getComputedStyle(element).animationName,
+    answerSize: Number.parseFloat(getComputedStyle(document.querySelector('#answer-result')).fontSize),
+    feedbackSize: Number.parseFloat(getComputedStyle(document.querySelector('#feedback')).fontSize),
+  }));
+  assert.equal(incorrectVisual.animationName, 'incorrect-flash');
+  assert.ok(incorrectVisual.answerSize > incorrectVisual.feedbackSize * 2);
+  await page.locator('#practice-card').evaluate((element) => new Promise((resolve) => {
+    element.addEventListener('animationend', resolve, { once: true });
+  }));
   assert.deepEqual(await page.locator('#practice-card').evaluate((element) => {
     const style = getComputedStyle(element);
     return [style.backgroundColor, style.borderTopColor];
@@ -97,9 +108,11 @@ try {
   record('6. Ошибка показывает ответ и двигает раунд');
 
   await page.locator('#check-button').click();
+  assert.equal(await page.locator('#answer-result').textContent(), '?');
   await solveCorrect(page, true);
   assert.equal(await page.locator('#round-count').textContent(), '2 из 10');
   assert.equal(await page.locator('#stars-value').textContent(), '1');
+  assert.equal(await page.locator('#answer-result').textContent(), String(await currentAnswer(page)));
   assert.deepEqual(await page.locator('#practice-card').evaluate((element) => {
     const style = getComputedStyle(element);
     return [style.backgroundColor, style.borderTopColor];

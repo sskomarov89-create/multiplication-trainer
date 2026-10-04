@@ -1,10 +1,11 @@
-const CACHE = 'umnozhayka-v5';
+const CACHE = 'umnozhayka-v6';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './src/app.js',
   './src/core.js',
+  './src/sounds.js',
   './manifest.webmanifest',
   './assets/icon.svg',
   './assets/icon-192.png',

@@ -61,8 +61,17 @@ describe('static PWA shell', () => {
   test('answer feedback colors the whole example card', async () => {
     const css = await read('styles.css');
     assert.match(css, /\.practice-card\.is-correct\s*\{[^}]*background:/s);
-    assert.match(css, /\.practice-card\.is-incorrect\s*\{[^}]*background:/s);
+    assert.match(css, /\.practice-card\.is-incorrect\s*\{[^}]*background:[^}]*animation:/s);
     assert.match(css, /\.practice-card\.is-incorrect\s*\{[^}]*border-color:/s);
+    assert.match(css, /@keyframes incorrect-flash/);
+  });
+
+  test('checked answer is revealed prominently and plays result sound', async () => {
+    const html = await read('index.html');
+    const app = await read('src/app.js');
+    assert.match(html, /id="answer-result"/);
+    assert.match(app, /answerResult\.textContent = String\(result\.correctAnswer\)/);
+    assert.match(app, /answerSounds\.play\(result\.isCorrect \? 'correct' : 'incorrect'\)/);
   });
 
   test('manifest describes a standalone installable app with icons', async () => {
@@ -75,8 +84,8 @@ describe('static PWA shell', () => {
 
   test('service worker caches the offline shell', async () => {
     const worker = await read('service-worker.js');
-    assert.match(worker, /const CACHE = ['"]umnozhayka-v5['"]/);
-    for (const asset of ['./', './index.html', './styles.css', './src/app.js', './src/core.js']) {
+    assert.match(worker, /const CACHE = ['"]umnozhayka-v6['"]/);
+    for (const asset of ['./', './index.html', './styles.css', './src/app.js', './src/core.js', './src/sounds.js']) {
       assert.ok(worker.includes(asset), `service worker must cache ${asset}`);
     }
     assert.match(worker, /addEventListener\(['"]fetch['"]/);
