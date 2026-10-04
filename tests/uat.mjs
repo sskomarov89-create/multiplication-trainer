@@ -90,12 +90,20 @@ try {
   await page.locator('#feedback.incorrect').waitFor();
   assert.match(await page.locator('#feedback').textContent(), new RegExp(String(correct)));
   assert.equal(await page.locator('#round-count').textContent(), '1 из 10');
+  assert.deepEqual(await page.locator('#practice-card').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.backgroundColor, style.borderTopColor];
+  }), ['rgb(253, 235, 237)', 'rgb(232, 160, 167)']);
   record('6. Ошибка показывает ответ и двигает раунд');
 
   await page.locator('#check-button').click();
   await solveCorrect(page, true);
   assert.equal(await page.locator('#round-count').textContent(), '2 из 10');
   assert.equal(await page.locator('#stars-value').textContent(), '1');
+  assert.deepEqual(await page.locator('#practice-card').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.backgroundColor, style.borderTopColor];
+  }), ['rgb(232, 248, 241)', 'rgb(131, 210, 182)']);
   record('7. Правильный ответ через Enter сохраняется');
 
   for (let answered = 2; answered < 10; answered += 1) {

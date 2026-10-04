@@ -58,6 +58,13 @@ describe('static PWA shell', () => {
     assert.match(app, /\/api\/leaderboard/);
   });
 
+  test('answer feedback colors the whole example card', async () => {
+    const css = await read('styles.css');
+    assert.match(css, /\.practice-card\.is-correct\s*\{[^}]*background:/s);
+    assert.match(css, /\.practice-card\.is-incorrect\s*\{[^}]*background:/s);
+    assert.match(css, /\.practice-card\.is-incorrect\s*\{[^}]*border-color:/s);
+  });
+
   test('manifest describes a standalone installable app with icons', async () => {
     const manifest = JSON.parse(await read('manifest.webmanifest'));
     assert.equal(manifest.display, 'standalone');
@@ -68,6 +75,7 @@ describe('static PWA shell', () => {
 
   test('service worker caches the offline shell', async () => {
     const worker = await read('service-worker.js');
+    assert.match(worker, /const CACHE = ['"]umnozhayka-v5['"]/);
     for (const asset of ['./', './index.html', './styles.css', './src/app.js', './src/core.js']) {
       assert.ok(worker.includes(asset), `service worker must cache ${asset}`);
     }
